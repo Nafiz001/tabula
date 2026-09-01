@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.10", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]"
+
+      - name: Test
+        run: pytest -v
+
+  # The claims in the README are training runs, so CI runs them rather than
+  # taking the numbers on trust. Separate job because it takes minutes.
+  verify-learning:
+    name: Verify the agents actually learn
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[dev]"
+
+      - name: Full training runs
+        run: pytest -v -m slow
+
+      - name: Self-play reaches perfect play
+        run: |
+          python - <<'PY'
+          from tabula.agents.selfplay import SelfPlayQLearning, evaluate_against_perfect
+          from tabula.core import LinearDecay
+          from tabula.envs import TicTacToeSolver
+
+          solver = TicTacToeSolver()
+          agent = SelfPlayQLearning(
+              learning_rate=0.3, epsilon=LinearDecay(0.9, 0.05, 48_000), seed=0
+          )
+          agent.train(episodes=60_000, seed=0)
+          result = evaluate_against_perfect(agent, solver, games=200, seed=1)
+          print(f"{result['losses']} losses, {result['draws']} draws of 200")
+          assert result["losses"] == 0, "the agent lost to a provably perfect opponent"
+          PY
+
+      - name: Q-learning and SARSA disagree on the cliff, as they should
+        run: |
+          python - <<'PY'
+          import numpy as np
+          from tabula.agents import QLearning, SARSA
+          from tabula.core import LinearDecay, evaluate, train
+          from tabula.envs import CliffWalking
+
+          results = {}
+          for cls in (QLearning, SARSA):
+              env = CliffWalking()
+              agent = cls(env.n_states, env.n_actions, learning_rate=0.5,
+                          discount=1.0, epsilon=LinearDecay(1.0, 0.1, 2000), seed=0)
+              history = train(env, agent, episodes=3000, seed=0)
+              results[cls.__name__] = (
+                  evaluate(CliffWalking(), agent, episodes=10, seed=99).mean_return,
+                  float(np.mean(history.returns[-500:])),
+              )
+
+          q_greedy, q_online = results["QLearning"]
+          s_greedy, s_online = results["SARSA"]
+          print(f"Q-learning: greedy {q_greedy:.1f}, online {q_online:.1f}")
+          print(f"SARSA     : greedy {s_greedy:.1f}, online {s_online:.1f}")
+
+          assert q_greedy > s_greedy, "Q-learning should find the shorter greedy path"
+          assert s_online > q_online, "SARSA should suffer less while exploring"
+          PY
+
+      - name: The CLI runs end to end
+        run: |
+          tabula train grid --episodes 500
+          tabula cliff --episodes 500
+          tabula train tictactoe --episodes 8000

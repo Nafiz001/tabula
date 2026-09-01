@@ -18,7 +18,12 @@ build-backend = "setuptools.build_meta"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # Deterministic by default: a flaky RL test is worse than no test.
-addopts = "-q"
+addopts = "-q -m 'not slow'"
+markers = [
+    # Real training runs, minutes rather than seconds. Excluded by default so a
+    # normal test pass stays fast; CI runs them separately.
+    "slow: full training runs, excluded from the default pass",
+]
 
 [tool.setuptools.packages.find]
 include = ["tabula*"]
