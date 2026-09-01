@@ -16,15 +16,22 @@ value of the empty board: 0  (0 means a draw with perfect play)
 
 random play vs perfect :  90 losses,  10 draws of 100
 
-after   7500 self-play games:  43 losses,  57 draws  |  84.4% of moves optimal
-after  15000 self-play games:   9 losses,  91 draws  |  91.2% of moves optimal
-after  30000 self-play games:   1 losses,  99 draws  |  95.1% of moves optimal
-after  60000 self-play games:   0 losses, 100 draws  |  96.9% of moves optimal
+after   7500 self-play games:  63 losses,  37 draws  |  78.3% of moves optimal
+after  15000 self-play games:  78 losses,  22 draws  |  84.0% of moves optimal
+after  30000 self-play games:  14 losses,  86 draws  |  94.7% of moves optimal
+after  60000 self-play games:   0 losses, 100 draws  |  97.2% of moves optimal
 ```
 
 That last line is the point of the project. The agent was given the rules and
 nothing else, played itself sixty thousand times, and ended up unable to lose
 to an opponent that is **provably** unbeatable.
+
+Note that the middle of that run gets *worse* before it gets better — 63 losses,
+then 78. That is real and it is expected: epsilon is still high there, so the
+agent is deliberately playing badly a good deal of the time, and the table is
+being rewritten faster than it is being refined. The output is left as it came
+out rather than smoothed, because a curve that only ever goes up is usually a
+sign the run was cherry-picked.
 
 ## Why measurement, not vibes
 
